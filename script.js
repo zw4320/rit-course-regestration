@@ -101,9 +101,21 @@ function createCourseCard(course) {
         card.classList.add('selected');
     }
     
+    // Check if prerequisites are met
+    const prerequisitesMet = checkPrerequisites(course);
+    const isLocked = !prerequisitesMet.met && course.prerequisites.length > 0;
+    
+    // Add locked styling if prerequisites not met
+    if (isLocked) {
+        card.style.opacity = '0.6';
+        card.style.borderColor = '#666';
+    }
+    
+    const lockIcon = isLocked ? ' 🔒' : '';
+    
     card.innerHTML = `
         <div class="course-header">
-            <div class="course-code">${course.courseCode}</div>
+            <div class="course-code">${course.courseCode}${lockIcon}</div>
             <div class="course-credits">${course.credits} CR</div>
         </div>
         <div class="course-title">${course.title}</div>
@@ -138,10 +150,24 @@ function showCourseDetails(course, cardElement) {
     if (course.prerequisites.length === 0) {
         prereqContainer.innerHTML = '<span style="color: #666;">None</span>';
     } else {
+        const scheduledCourseCodes = mySchedule.map(c => c.courseCode);
         course.prerequisites.forEach(prereq => {
             const tag = document.createElement('span');
+            const isCompleted = scheduledCourseCodes.includes(prereq);
             tag.className = 'prerequisite-tag';
-            tag.textContent = prereq;
+            
+            if (isCompleted) {
+                tag.style.background = '#2d6b2d';
+                tag.style.borderColor = '#4CAF50';
+                tag.style.color = '#4CAF50';
+                tag.textContent = prereq + ' ✓';
+            } else {
+                tag.style.background = '#2d2d2d';
+                tag.style.borderColor = '#ff4444';
+                tag.style.color = '#ff4444';
+                tag.textContent = prereq + ' ✗';
+            }
+            
             prereqContainer.appendChild(tag);
         });
     }
@@ -159,13 +185,21 @@ function showCourseDetails(course, cardElement) {
     // Update Add to Schedule button
     const addBtn = document.getElementById('addScheduleBtn');
     const isAlreadyInSchedule = mySchedule.some(c => c.id === course.id);
+    const prerequisitesMet = checkPrerequisites(course);
     
     if (isAlreadyInSchedule) {
         addBtn.textContent = 'Already in Schedule';
         addBtn.disabled = true;
+    } else if (!prerequisitesMet.met) {
+        addBtn.textContent = `Missing Prerequisites: ${prerequisitesMet.missing.join(', ')}`;
+        addBtn.disabled = true;
+        addBtn.style.background = '#666';
+        addBtn.style.cursor = 'not-allowed';
     } else {
         addBtn.textContent = 'Add to My Schedule';
         addBtn.disabled = false;
+        addBtn.style.background = '#F76902';
+        addBtn.style.cursor = 'pointer';
         addBtn.onclick = () => addToSchedule(course);
     }
     
@@ -188,6 +222,27 @@ function hideCourseDetails() {
     });
 }
 
+// Check if prerequisites are met
+function checkPrerequisites(course) {
+    // If no prerequisites, course can be taken
+    if (course.prerequisites.length === 0) {
+        return { met: true, missing: [] };
+    }
+    
+    // Get list of course codes in the student's schedule
+    const scheduledCourseCodes = mySchedule.map(c => c.courseCode);
+    
+    // Find which prerequisites are missing
+    const missingPrerequisites = course.prerequisites.filter(
+        prereq => !scheduledCourseCodes.includes(prereq)
+    );
+    
+    return {
+        met: missingPrerequisites.length === 0,
+        missing: missingPrerequisites
+    };
+}
+
 // Add course to schedule
 function addToSchedule(course) {
     // Check if already in schedule
@@ -197,6 +252,7 @@ function addToSchedule(course) {
     
     mySchedule.push(course);
     renderSchedule();
+    renderCourses(); // Re-render courses to update lock status for other courses
     
     // Update the button state
     const addBtn = document.getElementById('addScheduleBtn');
@@ -208,12 +264,23 @@ function addToSchedule(course) {
 function removeFromSchedule(courseId) {
     mySchedule = mySchedule.filter(c => c.id !== courseId);
     renderSchedule();
+    renderCourses(); // Re-render courses to update lock status
     
     // Update button if this course is currently selected
     if (selectedCourse && selectedCourse.id === courseId) {
         const addBtn = document.getElementById('addScheduleBtn');
         addBtn.textContent = 'Add to My Schedule';
         addBtn.disabled = false;
+        addBtn.style.background = '#F76902';
+        addBtn.style.cursor = 'pointer';
+    }
+    
+    // If the currently selected course is showing, refresh its details to update prerequisite status
+    if (selectedCourse) {
+        const currentCard = document.querySelector('.course-card.selected');
+        if (currentCard) {
+            showCourseDetails(selectedCourse, currentCard);
+        }
     }
 }
 
